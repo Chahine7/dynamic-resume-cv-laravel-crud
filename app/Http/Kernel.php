@@ -37,7 +37,9 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],
-
+'auth' => [
+        \App\Http\Middleware\Authenticate::class,
+    ],
         'api' => [
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             'throttle:api',
@@ -63,5 +65,10 @@ class Kernel extends HttpKernel
         'signed' => \App\Http\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        'no_resume' => \App\Http\Middleware\EnsureUserHasNoResume::class,
+        'admin' => \App\Http\Middleware\AdminMiddleware::class,
+        'authorize.access' => \App\Http\Middleware\AuthorizeResourceAccess::class,
+
+
     ];
 }

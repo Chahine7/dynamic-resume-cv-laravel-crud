@@ -8,4 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 class Skills extends Model
 {
     use HasFactory;
+
+    protected $fillable = [
+        'user_id', 
+        'skill_name', 
+        'skill_percentage'
+    ];
+
+public function user()
+{
+    return $this->belongsTo(User::class);
+}
 }

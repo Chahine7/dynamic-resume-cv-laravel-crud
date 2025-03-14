@@ -11,497 +11,350 @@ use App\Models\PersonalInformation;
 use App\Models\Projects;
 use App\Models\Skills;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class Userprofile extends Controller
 {
     public function index()
-    {
-        $personal_information   = PersonalInformation::get()->toArray();
+{
+    $user = Auth::user();
 
-        if (!empty($personal_information)) {
+    if ($user->isAdmin()) {
+        $resumes = PersonalInformation::with([
+            'user.contactInformation',
+            'user.education',
+            'user.experiences',
+            'user.projects',
+            'user.skills',
+            'user.languages',
+            'user.interests'
+        ])->paginate(10);
+        Log::info('Resumes Data: ' . json_encode($resumes, JSON_PRETTY_PRINT));
 
-            $user_data = array();
-            foreach ($personal_information as $personal_info) {
+        return view('index', [
+            'resumes' => $resumes,
+            'is_admin' => true,
+            'has_resume' => true 
+        ]);
 
-                $user_id = $personal_info['id'];
+    } else {
+        $data = [
+            'users_data' => [],
+            'has_resume' => false,
+            'is_admin' => false
+        ];
 
-                if (!empty($user_id)) {
-                    $user_info['personal_info']         = $personal_info;
+        if ($personalInfo = PersonalInformation::where('user_id', $user->id)->first()) {
+            $data['users_data'][] = [
+                'personal_info' => $personalInfo->toArray(),
+                'contact_info' => ContactInformation::where('user_id', $user->id)->first(),
+                'education_info' => $personalInfo->user->education->toArray(),
+                'experience_info' => $personalInfo->user->experiences->toArray(), // Changed to plural
+                'project_info' => $personalInfo->user->projects->toArray(),
+                'skill_info' => $personalInfo->user->skills->toArray(),
+                'language_info' => $personalInfo->user->languages->toArray(),
+                'interest_info' => $personalInfo->user->interests->toArray()
+            ];
+            $data['has_resume'] = true;
 
+            Log::info('Data: ' . json_encode($data, JSON_PRETTY_PRINT));
 
-                    $contact_info                       = ContactInformation::find($user_id);
-                    if (!empty($contact_info)) {
-
-                        $user_info['contact_info']      = $contact_info->toArray();
-                    }
-
-                    $education_info                     = Education::find($user_id);
-                    if (!empty($education_info)) {
-                        $user_info['education_info']    = $education_info->toArray();
-                    }
-
-                    $experience_info                    = Experience::find($user_id);
-                    if (!empty($experience_info)) {
-                        $user_info['experience_info']   = $experience_info->toArray();
-                    }
-
-                    $project_info                       = Projects::find($user_id);
-                    if (!empty($project_info)) {
-                        $user_info['project_info']      = $project_info->toArray();
-                    }
-
-                    $skill_info                         = Skills::find($user_id);
-                    if (!empty($skill_info)) {
-                        $user_info['skill_info']        = $skill_info->toArray();
-                    }
-
-                    $language_info                      = Languages::find($user_id);
-                    if (!empty($language_info)) {
-                        $user_info['language_info']     = $language_info->toArray();
-                    }
-
-                    $interest_info                      = Interests::find($user_id);
-                    if (!empty($interest_info)) {
-                        $user_info['interest_info']     = $interest_info->toArray();
-                    }
-                }
-
-                array_push($user_data, $user_info);
-            }
-        } else {
-            $user_data = array();
         }
 
-        return view('index', ['users_data' => $user_data]);
+        return view('index', $data);
     }
-
+}
+    /**
+     * Display the specified user's profile data.
+     */
     public function view($id)
     {
-        if (!empty($id)) {
-            $personal_information       = PersonalInformation::find($id)->toArray();
-            $contact_information        = ContactInformation::where('user_id', $id)->get()->first()->toArray();
-            $education_information      = Education::where('user_id', $id)->get()->toArray();
-            $experience_information     = Experience::where('user_id', $id)->get()->toArray();
-            $project_information        = Projects::where('user_id', $id)->get()->toArray();
-            $skill_information          = Skills::where('user_id', $id)->get()->toArray();
-            $language_information       = Languages::where('user_id', $id)->get()->toArray();
-            $interest_information       = Interests::where('user_id', $id)->get()->toArray();
-
-            $info['personal_info']      = $personal_information;
-            $info['contact_info']       = $contact_information;
-            $info['education_info']     = $education_information;
-            $info['experience_info']    = $experience_information;
-            $info['project_info']       = $project_information;
-            $info['skill_info']         = $skill_information;
-            $info['language_info']      = $language_information;
-            $info['interest_info']      = $interest_information;
-        }
-
+        $personal_info = PersonalInformation::where('user_id', $id)->firstOrFail();
+        $user_id = $personal_info['user_id'];
+        
+        $info = [
+            'personal_info' => $personal_info,
+            'contact_info' => ContactInformation::where('user_id', $user_id)->first()->toArray() ?? [],
+            'education_info' => Education::where('user_id', $user_id)->get()->toArray(),
+            'experience_info' => Experience::where('user_id', $user_id)->get()->toArray(),
+            'project_info' => Projects::where('user_id', $user_id)->get()->toArray(),
+            'skill_info' => Skills::where('user_id', $user_id)->get()->toArray(),
+            'language_info' => Languages::where('user_id', $user_id)->get()->toArray(),
+            'interest_info' => Interests::where('user_id', $user_id)->get()->toArray(),
+        ];
+        
         return view('view', ['information' => $info]);
     }
 
+  
     public function create()
     {
         return view('create');
     }
 
+  
     public function store(Request $request)
     {
+        $user = Auth::user();
+
         $personal_info = new PersonalInformation();
-        $personal_info->first_name        = $request->first_name;
-        $personal_info->last_name         = $request->last_name;
-        $personal_info->profile_title     = $request->profile_title;
-        $personal_info->about_me          = $request->about_me;
-        if ($request->file('image_path')) {
-            $picture       = !empty($request->file('image_path')) ? $request->file('image_path')->getClientOriginalName() : '';
+        $personal_info->user_id = $user->id;
+        $personal_info->first_name = $request->first_name;
+        $personal_info->last_name = $request->last_name;
+        $personal_info->profile_title = $request->profile_title;
+        $personal_info->about_me = $request->about_me;
+        if ($request->hasFile('image_path')) {
+            $picture = $request->file('image_path')->getClientOriginalName();
             $request->file('image_path')->move(public_path('assets/images/'), $picture);
+            $personal_info->image_path = $picture;
         }
-        $personal_info->image_path        = isset($picture) && !empty($picture) ? $picture : '';
         $personal_info->save();
 
-        $personal_information = PersonalInformation::latest()->first();
-
         $contact_info = new ContactInformation();
-        $contact_info->user_id          = $personal_information->id;
-        $contact_info->email            = $request->email;
-        $contact_info->phone_number     = $request->phone_number;
-        $contact_info->website          = $request->website;
-        $contact_info->linkedin_link    = $request->linkedin_link;
-        $contact_info->github_link      = $request->github_link;
-        $contact_info->twitter          = $request->twitter;
+        $contact_info->user_id = $user->id;
+        $contact_info->email = $request->email;
+        $contact_info->phone_number = $request->phone_number;
+        $contact_info->website = $request->website;
+        $contact_info->linkedin_link = $request->linkedin_link;
+        $contact_info->github_link = $request->github_link;
+        $contact_info->twitter = $request->twitter;
         $contact_info->save();
 
-
-        $edu_count = count($request->degree_title);
-        if ($edu_count != 0) {
-            for ($i = 0; $i < $edu_count; $i++) {
-
-                $education_info = new Education();
-                $education_info->user_id                = $personal_information->id;
-                $education_info->degree_title           = $request->degree_title[$i];
-                $education_info->institute              = $request->institute[$i];
-                $education_info->edu_start_date         = $request->edu_start_date[$i];
-                $education_info->edu_end_date           = $request->edu_end_date[$i];
-                $education_info->education_description  = $request->education_description[$i];
-                $education_info->save();
-            }
+        $edu_count = count($request->degree_title ?? []);
+        for ($i = 0; $i < $edu_count; $i++) {
+            $education_info = new Education();
+            $education_info->user_id = $user->id;
+            $education_info->degree_title = $request->degree_title[$i];
+            $education_info->institute = $request->institute[$i];
+            $education_info->edu_start_date = $request->edu_start_date[$i];
+            $education_info->edu_end_date = $request->edu_end_date[$i];
+            $education_info->education_description = $request->education_description[$i];
+            $education_info->save();
         }
 
-
-        $exp_count = count($request->job_title);
-        if ($exp_count != 0) {
-            for ($i = 0; $i < $exp_count; $i++) {
-
-                $experience_info = new Experience();
-                $experience_info->user_id          = $personal_information->id;
-                $experience_info->job_title        = $request->job_title[$i];
-                $experience_info->organization     = $request->organization[$i];
-                $experience_info->job_start_date   = $request->job_start_date[$i];
-                $experience_info->job_end_date     = $request->job_end_date[$i];
-                $experience_info->job_description  = $request->job_description[$i];
-                $experience_info->save();
-            }
+        $exp_count = count($request->job_title ?? []);
+        for ($i = 0; $i < $exp_count; $i++) {
+            $experience_info = new Experience();
+            $experience_info->user_id = $user->id;
+            $experience_info->job_title = $request->job_title[$i];
+            $experience_info->organization = $request->organization[$i];
+            $experience_info->job_start_date = $request->job_start_date[$i];
+            $experience_info->job_end_date = $request->job_end_date[$i];
+            $experience_info->job_description = $request->job_description[$i];
+            $experience_info->save();
         }
 
-        $project_count = count($request->project_title);
-        if ($project_count != 0) {
-            for ($i = 0; $i < $project_count; $i++) {
-
-                $project_info = new Projects();
-                $project_info->user_id              = $personal_information->id;
-                $project_info->project_title        = $request->project_title[$i];
-                $project_info->project_description  = $request->project_description[$i];
-                $project_info->save();
-            }
+        $project_count = count($request->project_title ?? []);
+        for ($i = 0; $i < $project_count; $i++) {
+            $project_info = new Projects();
+            $project_info->user_id = $user->id;
+            $project_info->project_title = $request->project_title[$i];
+            $project_info->project_description = $request->project_description[$i];
+            $project_info->save();
         }
 
-        $skill_count = count($request->skill_name);
-        if ($skill_count != 0) {
-            for ($i = 0; $i < $skill_count; $i++) {
-
-                $skill_info = new Skills();
-                $skill_info->user_id           = $personal_information->id;
-                $skill_info->skill_name        = $request->skill_name[$i];
-                $skill_info->skill_percentage  = $request->skill_percentage[$i];
-                $skill_info->save();
-            }
+        $skill_count = count($request->skill_name ?? []);
+        for ($i = 0; $i < $skill_count; $i++) {
+            $skill_info = new Skills();
+            $skill_info->user_id = $user->id;
+            $skill_info->skill_name = $request->skill_name[$i];
+            $skill_info->skill_percentage = $request->skill_percentage[$i];
+            $skill_info->save();
         }
 
-        $lang_count = count($request->language);
-        if ($lang_count != 0) {
-            for ($i = 0; $i < $lang_count; $i++) {
-
-                $language_info = new Languages();
-                $language_info->user_id         = $personal_information->id;
-                $language_info->language        = $request->language[$i];
-                $language_info->language_level  = $request->language_level[$i];
-                $language_info->save();
-            }
+        $lang_count = count($request->language ?? []);
+        for ($i = 0; $i < $lang_count; $i++) {
+            $language_info = new Languages();
+            $language_info->user_id = $user->id;
+            $language_info->language = $request->language[$i];
+            $language_info->language_level = $request->language_level[$i];
+            $language_info->save();
         }
 
-        $interest_count = count($request->interest);
-        if ($interest_count != 0) {
-            for ($i = 0; $i < $interest_count; $i++) {
-
-                $interest_info = new Interests();
-                $interest_info->user_id         = $personal_information->id;
-                $interest_info->interest        = $request->interest[$i];
-                $interest_info->save();
-            }
+        $interest_count = count($request->interest ?? []);
+        for ($i = 0; $i < $interest_count; $i++) {
+            $interest_info = new Interests();
+            $interest_info->user_id = $user->id;
+            $interest_info->interest = $request->interest[$i];
+            $interest_info->save();
         }
 
         return redirect()->route('index')->withSuccess("User Profile created successfully");
     }
 
+  
     public function edit($id)
-    {
-        if (!empty($id)) {
-            $personal_information       = PersonalInformation::find($id)->toArray();
-            $contact_information        = ContactInformation::where('user_id', $id)->get()->toArray();
-            $education_information      = Education::where('user_id', $id)->get()->toArray();
-            $experience_information     = Experience::where('user_id', $id)->get()->toArray();
-            $project_information        = Projects::where('user_id', $id)->get()->toArray();
-            $skill_information          = Skills::where('user_id', $id)->get()->toArray();
-            $language_information       = Languages::where('user_id', $id)->get()->toArray();
-            $interest_information       = Interests::where('user_id', $id)->get()->toArray();
+{
+    $user = Auth::user();
 
-            $info['personal_info']      = $personal_information;
-            $info['contact_info']       = $contact_information;
-            $info['education_info']     = $education_information;
-            $info['experience_info']    = $experience_information;
-            $info['project_info']       = $project_information;
-            $info['skill_info']         = $skill_information;
-            $info['language_info']      = $language_information;
-            $info['interest_info']      = $interest_information;
+    $personal_information = PersonalInformation::where('user_id', $id)->firstOrFail();
 
-            return view('edit', ['information' => $info]);
-        } else {
-            return redirect()->back()->withErrors('Somthing went wrong');
-        }
+    if (!$user->isAdmin() && $personal_information->user_id !== $user->id) {
+        abort(403, 'Unauthorized action.');
     }
 
+    $info = [
+        'personal_info' => $personal_information->toArray(),
+        'contact_info' => ContactInformation::where('user_id', $id)->get()->toArray(),
+        'education_info' => Education::where('user_id', $id)->get()->toArray(),
+        'experience_info' => Experience::where('user_id', $id)->get()->toArray(),
+        'project_info' => Projects::where('user_id', $id)->get()->toArray(),
+        'skill_info' => Skills::where('user_id', $id)->get()->toArray(),
+        'language_info' => Languages::where('user_id', $id)->get()->toArray(),
+        'interest_info' => Interests::where('user_id', $id)->get()->toArray(),
+    ];
+
+    return view('edit', [
+        'information' => $info,
+        'user_id' => $id
+    ]);
+}
+   
     public function update(Request $request)
     {
-
-        if ($request->verify == 1) {
-            $id = $request->user_id;
-
-            $personal_info = PersonalInformation::find($id);
-            $personal_info->first_name        = $request->first_name;
-            $personal_info->last_name         = $request->last_name;
-            $personal_info->profile_title     = $request->profile_title;
-            $personal_info->about_me          = $request->about_me;
-            if ($request->file('image_path')) {
-                $picture       = !empty($request->file('image_path')) ? $request->file('image_path')->getClientOriginalName() : '';
-                $request->file('image_path')->move(public_path('assets/images/'), $picture);
-            }
-            if (!empty($request->file('image_path'))) {
-                $personal_info->image_path        = isset($picture) && !empty($picture) ? $picture : '';
-            }
-            $personal_info->save();
-
-            $contact_info = ContactInformation::where('user_id', $id)->get()->first();
-            $contact_info->user_id          = $id;
-            $contact_info->email            = $request->email;
-            $contact_info->phone_number     = $request->phone_number;
-            $contact_info->website          = $request->website;
-            $contact_info->linkedin_link    = $request->linkedin_link;
-            $contact_info->github_link      = $request->github_link;
-            $contact_info->twitter          = $request->twitter;
-            $contact_info->save();
-
-
-            $education_info     = Education::where('user_id', $id)->get();
-            $edu_count_local    = !empty($request->degree_title) ? count($request->degree_title) : 0;
-            $edu_count_live     = count($education_info);
-
-            $edu_count_live >= $edu_count_local ? $edu_count = $edu_count_live : $edu_count = $edu_count_local;
-
-            if ($edu_count != 0) {
-                for ($i = 0; $i < $edu_count; $i++) {
-
-                    if ($edu_count_local > 0 && $edu_count_live <= 0) {
-
-                        $edu_info = new Education();
-                        $edu_info->user_id                = $id;
-                        $edu_info->degree_title           = $request->degree_title[$i];
-                        $edu_info->institute              = $request->institute[$i];
-                        $edu_info->edu_start_date         = $request->edu_start_date[$i];
-                        $edu_info->edu_end_date           = $request->edu_end_date[$i];
-                        $edu_info->education_description  = $request->education_description[$i];
-                        $edu_info->save();
-                    } elseif ($edu_count_live > 0 && $edu_count_local <= 0) {
-
-                        Education::find($education_info[$i]['id'])->delete();
-                    } else {
-
-                        $education_info[$i]->user_id                = $id;
-                        $education_info[$i]->degree_title           = $request->degree_title[$i];
-                        $education_info[$i]->institute              = $request->institute[$i];
-                        $education_info[$i]->edu_start_date         = $request->edu_start_date[$i];
-                        $education_info[$i]->edu_end_date           = $request->edu_end_date[$i];
-                        $education_info[$i]->education_description  = $request->education_description[$i];
-                        $education_info[$i]->save();
-                    }
-
-                    $edu_count_local--;
-                    $edu_count_live--;
-                }
-            }
-
-
-
-            $experience_info    = Experience::where('user_id', $id)->get();
-            $exp_count_local    = !empty($request->job_title) ? count($request->job_title) : 0;
-            $exp_count_live     = count($experience_info);
-
-            $exp_count_live >= $exp_count_local ? $exp_count = $exp_count_live : $exp_count = $exp_count_local;
-
-            if ($exp_count != 0) {
-                for ($i = 0; $i < $exp_count; $i++) {
-
-                    if ($exp_count_local > 0 && $exp_count_live <= 0) {
-
-                        $exp_info = new Experience();
-                        $exp_info->user_id          = $id;
-                        $exp_info->job_title        = $request->job_title[$i];
-                        $exp_info->organization     = $request->organization[$i];
-                        $exp_info->job_start_date   = $request->job_start_date[$i];
-                        $exp_info->job_end_date     = $request->job_end_date[$i];
-                        $exp_info->job_description  = $request->job_description[$i];
-                        $exp_info->save();
-                    } elseif ($exp_count_live > 0 && $exp_count_local <= 0) {
-
-                        Experience::find($experience_info[$i]['id'])->delete();
-                    } else {
-                        $experience_info[$i]->user_id          = $id;
-                        $experience_info[$i]->job_title        = $request->job_title[$i];
-                        $experience_info[$i]->organization     = $request->organization[$i];
-                        $experience_info[$i]->job_start_date   = $request->job_start_date[$i];
-                        $experience_info[$i]->job_end_date     = $request->job_end_date[$i];
-                        $experience_info[$i]->job_description  = $request->job_description[$i];
-                        $experience_info[$i]->save();
-                    }
-
-                    $exp_count_local--;
-                    $exp_count_live--;
-                }
-            }
-
-
-
-            $project_info           = Projects::where('user_id', $id)->get();
-            $project_count_local    = !empty($request->project_title) ? count($request->project_title) : 0;
-            $project_count_live     = count($project_info);
-
-            $project_count_live >= $project_count_local ? $project_count = $project_count_live : $project_count = $project_count_local;
-
-            if ($project_count != 0) {
-                for ($i = 0; $i < $project_count; $i++) {
-
-                    if ($project_count_local > 0 && $project_count_live <= 0) {
-
-                        $pro_info = new Projects();
-                        $pro_info->user_id              = $id;
-                        $pro_info->project_title        = $request->project_title[$i];
-                        $pro_info->project_description  = $request->project_description[$i];
-                        $pro_info->save();
-                    } elseif ($project_count_live > 0 && $project_count_local <= 0) {
-
-                        Projects::find($project_info[$i]['id'])->delete();
-                    } else {
-
-                        $project_info[$i]->user_id              = $id;
-                        $project_info[$i]->project_title        = $request->project_title[$i];
-                        $project_info[$i]->project_description  = $request->project_description[$i];
-                        $project_info[$i]->save();
-                    }
-
-                    $project_count_live--;
-                    $project_count_local--;
-                }
-            }
-
-
-            $skill_info           = Skills::where('user_id', $id)->get();
-            $skill_count_local    = !empty($request->skill_name) ? count($request->skill_name) : 0;
-            $skill_count_live     = count($skill_info);
-
-            $skill_count_live >= $skill_count_local ? $skill_count = $skill_count_live : $skill_count = $skill_count_local;
-
-            if ($skill_count != 0) {
-                for ($i = 0; $i < $skill_count; $i++) {
-
-                    if ($skill_count_local > 0 && $skill_count_live <= 0) {
-
-                        $sk_info = new Skills();
-                        $sk_info->user_id           = $id;
-                        $sk_info->skill_name        = $request->skill_name[$i];
-                        $sk_info->skill_percentage  = $request->skill_percentage[$i];
-                        $sk_info->save();
-                    } elseif ($skill_count_live > 0 && $skill_count_local <= 0) {
-
-                        Skills::find($skill_info[$i]['id'])->delete();
-                    } else {
-
-                        $skill_info[$i]->user_id           = $id;
-                        $skill_info[$i]->skill_name        = $request->skill_name[$i];
-                        $skill_info[$i]->skill_percentage  = $request->skill_percentage[$i];
-                        $skill_info[$i]->save();
-                    }
-
-                    $skill_count_live--;
-                    $skill_count_local--;
-                }
-            }
-
-
-
-            $language_info          = Languages::where('user_id', $id)->get();
-            $lang_count_local       = !empty($request->language) ? count($request->language) : 0;
-            $lang_count_live        = count($language_info);
-
-            $lang_count_live >= $lang_count_local ? $lang_count = $lang_count_live : $lang_count = $lang_count_local;
-
-            if ($lang_count != 0) {
-                for ($i = 0; $i < $lang_count; $i++) {
-
-                    if ($lang_count_local > 0 && $lang_count_live <= 0) {
-
-                        $lang_info = new Languages();
-                        $lang_info->user_id         = $id;
-                        $lang_info->language        = $request->language[$i];
-                        $lang_info->language_level  = $request->language_level[$i];
-                        $lang_info->save();
-                    } elseif ($lang_count_live > 0 && $lang_count_local <= 0) {
-
-                        Languages::find($language_info[$i]['id'])->delete();
-                    } else {
-
-                        $language_info[$i]->user_id         = $id;
-                        $language_info[$i]->language        = $request->language[$i];
-                        $language_info[$i]->language_level  = $request->language_level[$i];
-                        $language_info[$i]->save();
-                    }
-
-                    $lang_count_live--;
-                    $lang_count_local--;
-                }
-            }
-
-
-            $interest_info              = Interests::where('user_id', $id)->get();
-            $interest_count_local       = !empty($request->interest) ? count($request->interest) : 0;
-            $interest_count_live        = count($interest_info);
-
-            $interest_count_live >= $interest_count_local ? $interest_count = $interest_count_live : $interest_count = $interest_count_local;
-
-            if ($interest_count != 0) {
-                for ($i = 0; $i < $interest_count; $i++) {
-
-                    if ($interest_count_local > 0 && $interest_count_live <= 0) {
-
-                        $int_info = new Interests();
-                        $int_info->user_id         = $id;
-                        $int_info->interest        = $request->interest[$i];
-                        $int_info->save();
-                    } elseif ($interest_count_live > 0 && $interest_count_local <= 0) {
-
-                        Interests::find($interest_info[$i]['id'])->delete();
-                    } else {
-
-                        $interest_info[$i]->user_id         = $id;
-                        $interest_info[$i]->interest        = $request->interest[$i];
-                        $interest_info[$i]->save();
-                    }
-
-                    $interest_count_live--;
-                    $interest_count_local--;
-                }
-            }
+        if ($request->verify != 1) {
+            return redirect()->back()->withErrors("Verification failed");
         }
+    
+        $user_id = $request->user_id;    
+        PersonalInformation::updateOrCreate(
+            ['user_id' => $user_id],
+            [
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'profile_title' => $request->profile_title,
+                'about_me' => $request->about_me,
+                'image_path' => $request->hasFile('image_path') 
+                    ? $this->handleImageUpload($request->file('image_path')) 
+                    : PersonalInformation::where('user_id', $user_id)->value('image_path')
+            ]
+        );
 
+        ContactInformation::updateOrCreate(
+            ['user_id' => $user_id],
+            [
+                'email' => $request->email,
+                'phone_number' => $request->phone_number,
+                'website' => $request->website,
+                'linkedin_link' => $request->linkedin_link,
+                'github_link' => $request->github_link,
+                'twitter' => $request->twitter
+            ]
+        );
+    
+        $updateSection = function ($model, $fields, $requestValues) use ($user_id) {
+            $existing = $model::where('user_id', $user_id)->get();
+            $localCount = count($requestValues[array_key_first($requestValues)] ?? []); // e.g., degree_title array count
+            $existingCount = $existing->count();
+            $max = max($localCount, $existingCount);
+    
+            for ($i = 0; $i < $max; $i++) {
+                if ($i < $localCount && $i < $existingCount) {
+                    $data = ['user_id' => $user_id];
+                    foreach ($fields as $field) {
+                        $data[$field] = $requestValues[$field][$i] ?? null;
+                    }
+                    $existing[$i]->update($data);
+                } elseif ($i < $localCount && $i >= $existingCount) {
+                    $data = ['user_id' => $user_id];
+                    foreach ($fields as $field) {
+                        $data[$field] = $requestValues[$field][$i] ?? null;
+                    }
+                    $model::create($data);
+                } elseif ($i >= $localCount && $i < $existingCount) {
+                    $existing[$i]->delete();
+                }
+            }
+        };
+    
+        $updateSection(
+            Education::class,
+            ['degree_title', 'institute', 'edu_start_date', 'edu_end_date', 'education_description'],
+            [
+                'degree_title'          => $request->degree_title,
+                'institute'             => $request->institute,
+                'edu_start_date'        => $request->edu_start_date,
+                'edu_end_date'          => $request->edu_end_date,
+                'education_description' => $request->education_description,
+            ]
+        );
+    
+        $updateSection(
+            Experience::class,
+            ['job_title', 'organization', 'job_start_date', 'job_end_date', 'job_description'],
+            [
+                'job_title'       => $request->job_title,
+                'organization'    => $request->organization,
+                'job_start_date'  => $request->job_start_date,
+                'job_end_date'    => $request->job_end_date,
+                'job_description' => $request->job_description,
+            ]
+        );
+    
+        $updateSection(
+            Projects::class,
+            ['project_title', 'project_description'],
+            [
+                'project_title'       => $request->project_title,
+                'project_description' => $request->project_description,
+            ]
+        );
+    
+        $updateSection(
+            Skills::class,
+            ['skill_name', 'skill_percentage'],
+            [
+                'skill_name'       => $request->skill_name,
+                'skill_percentage' => $request->skill_percentage,
+            ]
+        );
+    
+        $updateSection(
+            Languages::class,
+            ['language', 'language_level'],
+            [
+                'language'       => $request->language,
+                'language_level' => $request->language_level,
+            ]
+        );
+    
+        $updateSection(
+            Interests::class,
+            ['interest'],
+            [
+                'interest' => $request->interest,
+            ]
+        );
+    
         return redirect()->back()->withSuccess("User Profile updated successfully");
     }
+    
 
+   
     public function destroy($id)
     {
 
-        if (!empty($id)) {
+        Log::info('ID: ' . json_encode($id, JSON_PRETTY_PRINT));
 
-            PersonalInformation::find($id)->delete();
-            ContactInformation::where('user_id', $id)->delete();
-            Education::where('user_id', $id)->delete();
-            Experience::where('user_id', $id)->delete();
-            Projects::where('user_id', $id)->delete();
-            Skills::where('user_id', $id)->delete();
-            Languages::where('user_id', $id)->delete();
-            Interests::where('user_id', $id)->delete();
-
-            return redirect()->back()->withSuccess("User Profile deleted successfully");
-        } else {
-
-            return redirect()->back()->withSuccess("Something went wrong");
-        }
+        $personal_info = PersonalInformation::where('user_id', $id)->firstOrFail();
+    
+        $personal_info->delete();
+        ContactInformation::where('user_id', $id)->delete();
+        Education::where('user_id', $id)->delete();
+        Experience::where('user_id', $id)->delete();
+        Projects::where('user_id', $id)->delete();
+        Skills::where('user_id', $id)->delete();
+        Languages::where('user_id', $id)->delete();
+        Interests::where('user_id', $id)->delete();
+    
+        return redirect()->route('index')->with('success', 'Your profile was successfully deleted.');
+    }
+    
+    private function handleImageUpload($file)
+    {
+        $picture = $file->getClientOriginalName();
+        $file->move(public_path('assets/images/'), $picture);
+        return $picture;
     }
 }
